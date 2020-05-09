@@ -1,7 +1,12 @@
 /**
  * Grab the pellets as fast as you can!
  **/
-
+class Point {
+    constructor(x,y) {
+        this.x=x;
+        this.y=y;
+    }
+}
 class Map {
     constructor(mapData,width,height) {
         this.field=mapData.map(x=>x);
@@ -13,7 +18,7 @@ class Map {
         return newMap
     }
     get(x,y) {
-        return this.field[x+y*(this.width)]
+        return this.field[(x+this.width)%this.width+(y+this.height)%this.height*(this.width)]
 
     }
     set(x,y,value) {
@@ -30,20 +35,55 @@ class Map {
         if (this.get((2*x-1)%this.width,y)!="#") directions=[{x:(2*x-1)%this.width,y:y},...directions];
         return directions;
     }
+    lineOfSight(x,y) {
+        let U= 0
+        let D= 0
+        let L= 0
+        let R= 0
+        let h = this.height;
+        let w = this.width
+        
+        while(this.get(x,y-U-1)!="#"&&U<h)U++;
+        while(this.get(x,y+D+1)!="#"&&D<h)D++;
+        while(this.get(x-L-1,y)!="#"&&L<w)L++;
+        while(this.get(x+R+1,y)!="#"&&R<w)R++;
+
+        return {
+            U:U,
+            D:D,
+            L:L,
+            R:R
+        }
+
+    }
+    printOut() {
+        let h = this.height;
+        let w = this.width;
+        for (i=0;i<h;i++)
+            console.error(this.field.slice(0+i*w,w+i*w).join``);
+    }
+    listPoints(value) {
+        let list = []
+        for (x=0;x<this.width;x++)for (y=0;y<this.height;y++) {
+            if (this.get(x,y)==value)
+                list.push(new Point(x,y));
+        }
+        return list;
+    }
 }
 class Pac {
-    constructor(x,y,pacId,owner,type,speedTimer=0,cooldown=0) {
+    constructor(x,y,pacId,owner,type,speedTimer=0,coolD=0) {
         this.x=x;
         this.y=y;
         this.Id=pacId;
         this.owner=owner;
         this.type=type
-        this.abilityCooldown=cooldown;
+        this.abilityCoolD=coolD;
         this.speed=speedTimer?2:1;
         this.speedTimer=speedTimer;
     }
     move(map,x,y,output) {
-        if (this.abilityCooldown) this.abilityCooldown--;
+        if (this.abilityCoolD) this.abilityCoolD--;
         if (this.speedTimer) this.speedTimer--;
         
         output.push(`MOVE ${this.Id} ${x} ${y}`);
@@ -53,15 +93,16 @@ class Pac {
     }
     speedX(output) {
         this.speed = 2;
-        this.abilityCooldown = 10;
+        this.abilityCoolD = 10;
         this.speedTimer = 5;
         output.push(`SPEED ${this.Id}`);
     }
     changeType(type,output) {
         this.type=type;
-        this.abilityCooldown=10;
+        this.abilityCoolD=10;
         output.push(`SWITCH ${this.Id} ${this.type}`)
     }
+    
 
 }
 class Player {
@@ -76,7 +117,7 @@ function readMap() {
     let map
     var inputs = readline().split(' ');
     width = parseInt(inputs[0]); // size of the grid
-    height = parseInt(inputs[1]); // top left corner is (x=0, y=0)
+    height = parseInt(inputs[1]); // top L corner is (x=0, y=0)
     for (let i = 0; i < height; i++) {
         const row = readline(); // one line of the grid: space " " is floor, pound "#" is wall
         if (i) map = map + row;
@@ -84,6 +125,20 @@ function readMap() {
     }
     return map;
 }
+function updateSight(game) {
+    let myPacs = game.pacs.filter(pac=>pac.owner==1)
+    for (i=0;i<myPacs.length;i++) {
+       let pac = myPacs[i]
+       let directions = game.map.lineOfSight(pac.x,pac.y);
+       for (j = 0; j < directions.U ; j++) game.map.set(pac.x,pac.y-directions.U,0);
+       for (j = 0; j < directions.D ; j++) game.map.set(pac.x,pac.y+directions.D,0);
+       for (j = 0; j < directions.L ; j++) game.map.set(pac.x-directions.L,pac.y,0);
+       for (j = 0; j < directions.R ; j++) game.map.set(pac.x-directions.R,pac.y,0);
+
+    }
+
+}
+
 function readTurn(game) {
     game.output=[];
     game.pacs=[];
@@ -104,25 +159,62 @@ function readTurn(game) {
         const x = parseInt(inputs[2]); // position in the grid
         const y = parseInt(inputs[3]); // position in the grid
         const typeId = inputs[4]; // unused in wood leagues
-        const speedTurnsLeft = parseInt(inputs[5]); // unused in wood leagues
-        const abilityCooldown = parseInt(inputs[6]); // unused in wood leagues
-        game.pacs.push(new Pac(x,y,pacId,mine,typeId,speedTurnsLeft,abilityCooldown));
+        const speedTurnsL = parseInt(inputs[5]); // unused in wood leagues
+        const abilityCoolD = parseInt(inputs[6]); // unused in wood leagues
+        game.pacs.push(new Pac(x,y,pacId,mine,typeId,speedTurnsL,abilityCoolD));
         
     }
+    updateSight(game)
     const visiblePelletCount = parseInt(readline()); // all pellets in sight
     let pellets=[]
-    game.map.reset()
     for (let i = 0; i < visiblePelletCount; i++) {
         var inputs = readline().split(' ');
         const x = parseInt(inputs[0]);
         const y = parseInt(inputs[1]);
         const value = parseInt(inputs[2]); // amount of points this pellet is worth
         pellets.push({x:x,y:y,value:value})
-        game.map.set(x,y,value)
+        game.map.set(x,y,value==10?9:value)
     }
     return pellets;
 
 }
+
+function applyLogic(game,pellets) {
+    myPacs = game.pacs.filter(pac=>pac.owner==1);
+    // Write an action using console.log()
+    // To debug: console.error('Debug messages...');
+    for(i=0;i<myPacs.length;i++) {
+        pac=myPacs[i]
+
+        let targets = pellets.filter(p=>p.x==pac.x||p.y==pac.y)
+        
+
+        if (targets.length==0) {
+            targets = pellets.filter(p=>p.value==10);
+            
+        }
+        if (targets.length==0) {
+            targets = game.map.listPoints(" ")
+        }
+        if (targets.length==0) {
+            targets = game.map.listPoints("1")
+        }
+
+        let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))
+        let cp=targets[distances.indexOf(Math.min(...distances))];
+        
+        if ((Math.abs(pac.x-cp.x)+Math.abs(pac.y-cp.y))==1&&pac.speed==2) {
+            console.error(pac.Id, "moves less")
+        }
+        if (pac.abilityCoolD == 0) pac.speedX(game.output);
+        else pac.move(game.map,cp.x,cp.y,game.output);
+        
+
+    }
+}
+
+
+
 
 
 
@@ -140,34 +232,11 @@ let game = {
 }
 
 
+
 // game loop
 while (true) {
     let pellets = readTurn(game);
-
-    myPacs = game.pacs.filter(pac=>pac.owner==1)
-    // Write an action using console.log()
-    // To debug: console.error('Debug messages...');
-    for(i=0;i<myPacs.length;i++) {
-        pac=myPacs[i]
-
-        let targets = pellets.filter(p=>p.x==pac.x||p.y==pac.y)
-        
-        let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))
-        let cp=targets[distances.indexOf(Math.min(...distances))];
-        console.error(targets, pac.Id,cp,distances)
-        if (targets.length==0) {
-            targets = pellets.filter(p=>p.value==10);
-            console.error(targets, pac.Id)
-            distances=targets.map(p=>(p.x-pac.x)**2+(p.y-pac.y)**2)
-            cp=targets[distances.indexOf(Math.min(...distances))];
-        }
-        if (pac.abilityCooldown == 0) pac.speedX(game.output);
-        else pac.move(game.map,cp.x,cp.y,game.output);
-        console.error(pac)
-        
-
-    }
-    console.error(myPacs.length)
+    applyLogic(game,pellets);
     console.log(game.output.join` | `);     // MOVE <pacId> <x> <y>
 
 }
