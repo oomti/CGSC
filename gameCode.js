@@ -22,17 +22,47 @@ class Map {
     reset() {
         this.field=this.field.map(tile=>tile=="#"?"#":" ");
     }
+    neighbour(x,y) {
+        let directions = [];
+        if (this.get(x,(2*y-1)%this.height)!="#") directions=[{x:x,y:(2*y-1)%this.height}];
+        if (this.get((x+1)%this.width,y)!="#") directions=[{x:(x+1)%this.width,y:y},...directions];
+        if (this.get(x,(y+1)%this.height)!="#") directions=[{x:x,y:(y+1)%this.height},...directions];
+        if (this.get((2*x-1)%this.width,y)!="#") directions=[{x:(2*x-1)%this.width,y:y},...directions];
+        return directions;
+    }
 }
 class Pac {
-    constructor(x,y,pacId,owner) {
+    constructor(x,y,pacId,owner,type,speedTimer=0,cooldown=0) {
         this.x=x;
         this.y=y;
         this.Id=pacId;
         this.owner=owner;
+        this.type=type
+        this.abilityCooldown=cooldown;
+        this.speed=speedTimer?2:1;
+        this.speedTimer=speedTimer;
     }
-    move(x,y) {
+    move(map,x,y,output) {
+        if (this.abilityCooldown) this.abilityCooldown--;
+        if (this.speedTimer) this.speedTimer--;
+        
+        output.push(`MOVE ${this.Id} ${x} ${y}`);
+        return true; 
+        
 
     }
+    speedX(output) {
+        this.speed = 2;
+        this.abilityCooldown = 10;
+        this.speedTimer = 5;
+        output.push(`SPEED ${this.Id}`);
+    }
+    changeType(type,output) {
+        this.type=type;
+        this.abilityCooldown=10;
+        output.push(`SWITCH ${this.Id} ${this.type}`)
+    }
+
 }
 class Player {
     constructor(score) {
@@ -40,8 +70,6 @@ class Player {
     }
 
 }
-
-
 let width
 let height
 function readMap() {
@@ -56,8 +84,10 @@ function readMap() {
     }
     return map;
 }
-
 function readTurn(game) {
+    game.output=[];
+    game.pacs=[];
+
     var inputs = readline().split(' ');
     const myScore = parseInt(inputs[0]);
     const opponentScore = parseInt(inputs[1]);
@@ -65,7 +95,7 @@ function readTurn(game) {
     
     game.players[0].score = myScore;
     game.players[1].score = opponentScore;
-    game.pacs=[]    
+       
     let myPac
     for (let i = 0; i < visiblePacCount; i++) {
         var inputs = readline().split(' ');
@@ -76,7 +106,7 @@ function readTurn(game) {
         const typeId = inputs[4]; // unused in wood leagues
         const speedTurnsLeft = parseInt(inputs[5]); // unused in wood leagues
         const abilityCooldown = parseInt(inputs[6]); // unused in wood leagues
-        game.pacs.push(new Pac(x,y,pacId,mine));
+        game.pacs.push(new Pac(x,y,pacId,mine,typeId,speedTurnsLeft,abilityCooldown));
         
     }
     const visiblePelletCount = parseInt(readline()); // all pellets in sight
@@ -97,6 +127,8 @@ function readTurn(game) {
 
 
 
+
+
 console.error("hi")
 let startMap = new Map([...readMap()],width,height);
 
@@ -104,7 +136,7 @@ let game = {
     map : startMap,
     pacs : [],
     players : [new Player(0) , new Player(0)],
-    output : null
+    output : []
 }
 
 
@@ -116,13 +148,26 @@ while (true) {
     // Write an action using console.log()
     // To debug: console.error('Debug messages...');
     for(i=0;i<myPacs.length;i++) {
-        let distances=pellets.map(p=>(p.x-myPacs[i].x)**2+(p.y-myPacs[i].y)**2)
-        cp=pellets[distances.indexOf(Math.min(...distances))]
-        if (i) game.output += ` | MOVE ${myPacs[i].Id} ${cp.x} ${cp.y}`;
-        else game.output = `MOVE ${myPacs[i].Id} ${cp.x} ${cp.y}`;
+        pac=myPacs[i]
+
+        let targets = pellets.filter(p=>p.x==pac.x||p.y==pac.y)
+        
+        let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))
+        let cp=targets[distances.indexOf(Math.min(...distances))];
+        console.error(targets, pac.Id,cp,distances)
+        if (targets.length==0) {
+            targets = pellets.filter(p=>p.value==10);
+            console.error(targets, pac.Id)
+            distances=targets.map(p=>(p.x-pac.x)**2+(p.y-pac.y)**2)
+            cp=targets[distances.indexOf(Math.min(...distances))];
+        }
+        if (pac.abilityCooldown == 0) pac.speedX(game.output);
+        else pac.move(game.map,cp.x,cp.y,game.output);
+        console.error(pac)
+        
 
     }
     console.error(myPacs.length)
-    console.log(game.output);     // MOVE <pacId> <x> <y>
+    console.log(game.output.join` | `);     // MOVE <pacId> <x> <y>
 
 }

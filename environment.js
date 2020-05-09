@@ -1,11 +1,12 @@
 class map {
     constructor() {
+        this=''
+    }
+    
+    get(x,y) {
 
     }
-    get TBD() {
-
-    }
-    set TBD() {
+    set(x,y) {
 
     }
 
