@@ -7,6 +7,13 @@ class Point {
         this.y=y;
     }
 }
+class Node extends Point {
+    constructor(x,y,edges) {
+        super(x,y);
+        this.edges=edges;
+        this.friends = [];
+    }
+}
 class Map {
     constructor(mapData,width,height) {
         this.field=mapData.map(x=>x);
@@ -28,11 +35,13 @@ class Map {
         this.field=this.field.map(tile=>tile=="#"?"#":" ");
     }
     neighbour(x,y) {
+        let h = this.height;
+        let w = this.width;
         let directions = [];
-        if (this.get(x,(2*y-1)%this.height)!="#") directions=[{x:x,y:(2*y-1)%this.height}];
-        if (this.get((x+1)%this.width,y)!="#") directions=[{x:(x+1)%this.width,y:y},...directions];
-        if (this.get(x,(y+1)%this.height)!="#") directions=[{x:x,y:(y+1)%this.height},...directions];
-        if (this.get((2*x-1)%this.width,y)!="#") directions=[{x:(2*x-1)%this.width,y:y},...directions];
+        if (this.get(x,(h+y-1)%h)!="#") directions=[{x:x,y:(h+y-1)%h}];
+        if (this.get((x+1)%w,y)!="#") directions=[{x:(x+1)%w,y:y},...directions];
+        if (this.get(x,(y+1)%h)!="#") directions=[{x:x,y:(y+1)%h},...directions];
+        if (this.get((w+x-1)%w,y)!="#") directions=[{x:(w+x-1)%w,y:y},...directions];
         return directions;
     }
     lineOfSight(x,y) {
@@ -69,6 +78,17 @@ class Map {
                 list.push(new Point(x,y));
         }
         return list;
+    }
+    listNodes() {
+        let nodes = []
+        for (let x=0;x<this.width;x++)for (let y=0;y<this.height;y++){
+            let n = this.neighbour(x,y).length
+            if (n!=2&&this.get(x,y)!="#") {
+                nodes.push(new Node(x,y,n));
+            }
+        }
+        console.error(nodes.length,nodes)
+        return nodes; 
     }
 }
 class Pac {
@@ -205,6 +225,8 @@ function applyLogic(game,pellets) {
         
         if ((Math.abs(pac.x-cp.x)+Math.abs(pac.y-cp.y))==1&&pac.speed==2) {
             console.error(pac.Id, "moves less")
+            cp.x+=cp.x-pac.x;
+            cp.y+=cp.y-pac.y;
         }
         if (pac.abilityCoolD == 0) pac.speedX(game.output);
         else pac.move(game.map,cp.x,cp.y,game.output);
@@ -230,6 +252,7 @@ let game = {
     players : [new Player(0) , new Player(0)],
     output : []
 }
+game.map.listNodes();
 
 
 
