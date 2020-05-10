@@ -19,9 +19,10 @@ class Map {
         this.field=mapData.map(x=>x);
         this.width=width;
         this.height=height;
+        
     }
     copy() {
-        let newMap = new Map(this.field,this.width,this.weight)
+        let newMap = new Map([...this.field],this.width,this.height)
         return newMap
     }
     get(x,y) {
@@ -29,7 +30,7 @@ class Map {
 
     }
     set(x,y,value) {
-        this.field[x+y*(this.width)]=value;
+        this.field[(x+this.width)%this.width+((y+this.height)%this.height)*(this.width)]=value;
     }
     reset() {
         this.field=this.field.map(tile=>tile=="#"?"#":" ");
@@ -50,46 +51,47 @@ class Map {
         let L= 0
         let R= 0
         let h = this.height;
-        let w = this.width
+        let w = this.width;
+        let cells = [];
         
-        while(this.get(x,y-U-1)!="#"&&U<h)U++;
-        while(this.get(x,y+D+1)!="#"&&D<h)D++;
-        while(this.get(x-L-1,y)!="#"&&L<w)L++;
-        while(this.get(x+R+1,y)!="#"&&R<w)R++;
+        while(this.get(x,y-U-1)!="#"&&U<h){
+            cells.push({x:x,y:y-U-1})
+            U++;
+        }
+        while(this.get(x,y+D+1)!="#"&&D<h){
+            cells.push({x:x,y:y+D+1})
+            D++;}
+        while(this.get(x-L-1,y)!="#"&&L<w){
+            cells.push({x:x-L-1,y:y})
+            L++;}
+        while(this.get(x+R+1,y)!="#"&&R<w){
+            cells.push({x:x+R+1,y:y})
+            R++;}
 
         return {
             U:U,
             D:D,
             L:L,
-            R:R
+            R:R,
+            cells
         }
 
     }
     printOut() {
         let h = this.height;
         let w = this.width;
-        for (i=0;i<h;i++)
+        for (let i=0;i<h;i++)
             console.error(this.field.slice(0+i*w,w+i*w).join``);
     }
-    listPoints(value) {
+    listPoints(value) { 
         let list = []
-        for (x=0;x<this.width;x++)for (y=0;y<this.height;y++) {
+        for (let x=0;x<this.width;x++)for (let y=0;y<this.height;y++) {
             if (this.get(x,y)==value)
                 list.push(new Point(x,y));
         }
         return list;
     }
-    listNodes() {
-        let nodes = []
-        for (let x=0;x<this.width;x++)for (let y=0;y<this.height;y++){
-            let n = this.neighbour(x,y).length
-            if (n!=2&&this.get(x,y)!="#") {
-                nodes.push(new Node(x,y,n));
-            }
-        }
-        console.error(nodes.length,nodes)
-        return nodes; 
-    }
+    
 }
 class Pac {
     constructor(x,y,pacId,owner,type,speedTimer=0,coolD=0) {
@@ -102,11 +104,13 @@ class Pac {
         this.speed=speedTimer?2:1;
         this.speedTimer=speedTimer;
     }
-    move(map,x,y,output) {
+    move(gmap,x,y,output) {
+        let h = gmap.height;
+        let w = gmap.width;
         if (this.abilityCoolD) this.abilityCoolD--;
         if (this.speedTimer) this.speedTimer--;
         
-        output.push(`MOVE ${this.Id} ${x} ${y}`);
+        output.push(`MOVE ${this.Id} ${(x+w)%w} ${(y+h)%h}`);
         return true; 
         
 
@@ -134,26 +138,24 @@ class Player {
 let width
 let height
 function readMap() {
-    let map
+    let gmap
     var inputs = readline().split(' ');
     width = parseInt(inputs[0]); // size of the grid
     height = parseInt(inputs[1]); // top L corner is (x=0, y=0)
     for (let i = 0; i < height; i++) {
         const row = readline(); // one line of the grid: space " " is floor, pound "#" is wall
-        if (i) map = map + row;
-        else map = row;
+        if (i) gmap = gmap + row;
+        else gmap = row;
     }
-    return map;
+    return gmap;
 }
 function updateSight(game) {
     let myPacs = game.pacs.filter(pac=>pac.owner==1)
     for (i=0;i<myPacs.length;i++) {
        let pac = myPacs[i]
-       let directions = game.map.lineOfSight(pac.x,pac.y);
-       for (j = 0; j < directions.U ; j++) game.map.set(pac.x,pac.y-directions.U,0);
-       for (j = 0; j < directions.D ; j++) game.map.set(pac.x,pac.y+directions.D,0);
-       for (j = 0; j < directions.L ; j++) game.map.set(pac.x-directions.L,pac.y,0);
-       for (j = 0; j < directions.R ; j++) game.map.set(pac.x-directions.R,pac.y,0);
+       let lineOfSight = game.map.lineOfSight(pac.x,pac.y);
+       lineOfSight.cells.map(c=>game.map.set(c.x,c.y,"0"));
+       game.map.set(pac.x,pac.y,"0");
 
     }
 
@@ -185,6 +187,7 @@ function readTurn(game) {
         
     }
     updateSight(game)
+    game.map.printOut();
     const visiblePelletCount = parseInt(readline()); // all pellets in sight
     let pellets=[]
     for (let i = 0; i < visiblePelletCount; i++) {
@@ -206,18 +209,21 @@ function applyLogic(game,pellets) {
     for(i=0;i<myPacs.length;i++) {
         pac=myPacs[i]
 
-        let targets = pellets.filter(p=>p.x==pac.x||p.y==pac.y)
+        let targets = []
         
 
         if (targets.length==0) {
             targets = pellets.filter(p=>p.value==10);
             
         }
-        if (targets.length==0) {
-            targets = game.map.listPoints(" ")
+        if (targets.length == 0) {
+            targets=pellets.filter(p=>p.x==pac.x||p.y==pac.y)
         }
         if (targets.length==0) {
             targets = game.map.listPoints("1")
+        }
+        if (targets.length==0) {
+            targets = game.map.listPoints("0")
         }
 
         let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))
@@ -235,7 +241,71 @@ function applyLogic(game,pellets) {
     }
 }
 
+let graphModel = {
+    listNodes: function(gmap) {
+        let nodes = []
+        for (let x=0;x<gmap.width;x++)for (let y=0;y<gmap.height;y++){
+            let n = gmap.neighbour(x,y).length
+            if (n!=2&&gmap.get(x,y)!="#") {
+                nodes.push(new Node(x,y,n));
+            }
+        }
+        
+        return nodes; 
+    },
+    showNodes: function(gmap, nodes) {
+        let nodeMap = gmap.copy();
+        for (let i=0; i<nodes.length;i++) {
+            let n=nodes[i];
+            nodeMap.set(n.x,n.y,n.edges)
+        }
+    },
+    findEdges: function(gmap,nodes) {
+        console.error("Finding edges")
+        let edgeID = gmap.copy();
+        let distances = gmap.copy();
+        for (let i = 0;i<nodes.length;i++) {
+            let n = nodes[i]
+            edgeID.set(n.x,n.y,`N:${i}:${n.edges}`)
+            let neighbours = 
+                gmap.neighbour(n.x,n.y)
+                .filter(p=>gmap.neighbour(p.x,p.y).length==2)
+            neighbours.map((p,j)=>{
+                edgeID.set(p.x,p.y,`E:${i}:${j}`);
+                distances.set(p.x,p.y,1);
+            });
 
+        }
+        let edgePoints = [];
+        for (let x=0;x<this.width;x++)for (let y=0;y<this.height;y++){
+            let n = this.neighbour(x,y).length;
+            if (n==2&&this.get(x,y)!="#") {
+                edgePoints.push(new Point(x,y));
+            }
+        }
+        console.error(edgePoints)
+        let pointsToSet = edgePoints.filter(p=>edgeID.get(p.x,p.y)==" ");
+        console.error(pointsToSet)
+        while (pointsToSet.length) {
+            console.error(pointsToSet.length)
+            for (let i = 0; i<pointsToSet.length;i++) {
+                let p = pointsToSet[i]
+                
+                let n = edgeID.neighbour(p.x,p.y).find(pn=> edgeID.get(pn.x,pn.y)!=" ")
+                if (n) {
+                    let value = edgeID.get(n.x,n.y);
+                    let dist = distances.get(n.x,n.y);
+                    edgeID.set(p.x,p.y,value);
+                    distances.set(p.x,p.y,dist+1);
+                }
+            }
+            pointsToSet = pointsToSet.filter(p=>edgeID.get(p.x,p.y)==" ");
+        }
+        console.error(distances)
+        distances.printOut();
+
+    }
+}
 
 
 
@@ -252,7 +322,10 @@ let game = {
     players : [new Player(0) , new Player(0)],
     output : []
 }
-game.map.listNodes();
+let nodes = graphModel.listNodes(game.map);
+
+graphModel.showNodes(game.map,nodes)
+graphModel.findEdges(game.map,nodes)
 
 
 
