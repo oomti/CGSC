@@ -267,42 +267,77 @@ let graphModel = {
         for (let i = 0;i<nodes.length;i++) {
             let n = nodes[i]
             edgeID.set(n.x,n.y,`N:${i}:${n.edges}`)
-            let neighbours = 
-                gmap.neighbour(n.x,n.y)
-                .filter(p=>gmap.neighbour(p.x,p.y).length==2)
-            neighbours.map((p,j)=>{
-                edgeID.set(p.x,p.y,`E:${i}:${j}`);
-                distances.set(p.x,p.y,1);
+
+        }
+        for (let i = 0;i<nodes.length;i++) {
+            let n = nodes[i]
+            let nbor = edgeID.neighbour(n.x,n.y);
+            nbor=nbor.filter(nb=>edgeID.get(nb.x,nb.y)==" ");
+            if (nbor) nbor.map((e,j)=>{
+                let edgePoints = [e];
+                edgeID.set(e.x,e.y,`E:${i}:${j}`)
+                distances.set(e.x,e.y,1)
+                let next = edgeID.neighbour(e.x,e.y).find(en=>edgeID.get(en.x,en.y)==" ");
+                let c = 1;
+                while (next) {
+                    edgePoints.push(next);
+                    edgeID.set(next.x,next.y,`E:${i}:${j}`);
+                    c++;
+                    next = edgeID.neighbour(next.x,next.y).find(en=>edgeID.get(en.x,en.y)==" ");
+                    
+                }
+                edgePoints.map(e=>distances.set(e.x,e.y,c));
             });
 
         }
-        let edgePoints = [];
-        for (let x=0;x<this.width;x++)for (let y=0;y<this.height;y++){
-            let n = this.neighbour(x,y).length;
-            if (n==2&&this.get(x,y)!="#") {
-                edgePoints.push(new Point(x,y));
-            }
-        }
-        console.error(edgePoints)
-        let pointsToSet = edgePoints.filter(p=>edgeID.get(p.x,p.y)==" ");
-        console.error(pointsToSet)
-        while (pointsToSet.length) {
-            console.error(pointsToSet.length)
-            for (let i = 0; i<pointsToSet.length;i++) {
-                let p = pointsToSet[i]
-                
-                let n = edgeID.neighbour(p.x,p.y).find(pn=> edgeID.get(pn.x,pn.y)!=" ")
-                if (n) {
-                    let value = edgeID.get(n.x,n.y);
-                    let dist = distances.get(n.x,n.y);
-                    edgeID.set(p.x,p.y,value);
-                    distances.set(p.x,p.y,dist+1);
-                }
-            }
-            pointsToSet = pointsToSet.filter(p=>edgeID.get(p.x,p.y)==" ");
-        }
-        console.error(distances)
+        let connections = []
         distances.printOut();
+        let edgePoints = gmap.listPoints(" ");
+        edgePoints.map(e=>{
+            let eID = edgeID.get(e.x,e.y).split`:`
+            let nb = edgeID.neighbour(e.x,e.y);
+            nb = nb.find(n=>{
+                let nID = edgeID.get(n.x,n.y).split`:`;
+                if (nID[0] == "N"&&nID[1]!=eID[1])
+                    return true
+                return false
+            })
+            if (nb) {
+                let nID = edgeID.get(nb.x,nb.y).split`:`;
+                nodes[eID[1]].friends.push({
+                    node:nID[1],
+                    length:distances.get(e.x,e.y),
+                    edge:eID[2]
+                }) 
+            } 
+
+        });
+        edgePoints.map(e=>{
+            let eV = edgeID.get(e.x,e.y).split`:`;
+            let partnerNode = nodes[eV[1]].friends.find(f=>f.edge==eV[2]);
+            if (partnerNode) edgeID.set(e.x,e.y,`${eV[1]}:${partnerNode.node}:${partnerNode.length}:${partnerNode.edge}`);
+            
+        })
+        return {graphMap:edgeID, nodes:nodes}
+
+    },
+    createFullGraph: function(gmap) {
+        let nodes = this.listNodes(gmap);
+        fullGraph = this.findEdges(gmap,nodes);
+        return fullGraph;
+
+    }
+}
+class Graph {
+    constructor(gmap) {
+        let graph = graphModel.createFullGraph(Graph);
+        this.nodes = graph.node;
+        this.edgesMap = graph.graphMap;
+    }
+    get nodeFromXY(x,y) {
+        return node
+    }
+    get connections(node) {
 
     }
 }
