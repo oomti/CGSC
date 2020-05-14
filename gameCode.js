@@ -137,109 +137,6 @@ class Player {
 }
 let width
 let height
-function readMap() {
-    let gmap
-    var inputs = readline().split(' ');
-    width = parseInt(inputs[0]); // size of the grid
-    height = parseInt(inputs[1]); // top L corner is (x=0, y=0)
-    for (let i = 0; i < height; i++) {
-        const row = readline(); // one line of the grid: space " " is floor, pound "#" is wall
-        if (i) gmap = gmap + row;
-        else gmap = row;
-    }
-    return gmap;
-}
-function updateSight(game) {
-    let myPacs = game.pacs.filter(pac=>pac.owner==1)
-    for (i=0;i<myPacs.length;i++) {
-       let pac = myPacs[i]
-       let lineOfSight = game.map.lineOfSight(pac.x,pac.y);
-       lineOfSight.cells.map(c=>game.map.set(c.x,c.y,"0"));
-       game.map.set(pac.x,pac.y,"0");
-
-    }
-
-}
-
-function readTurn(game) {
-    game.output=[];
-    game.pacs=[];
-
-    var inputs = readline().split(' ');
-    const myScore = parseInt(inputs[0]);
-    const opponentScore = parseInt(inputs[1]);
-    const visiblePacCount = parseInt(readline()); // all your pacs and enemy pacs in sight
-    
-    game.players[0].score = myScore;
-    game.players[1].score = opponentScore;
-       
-    let myPac
-    for (let i = 0; i < visiblePacCount; i++) {
-        var inputs = readline().split(' ');
-        const pacId = parseInt(inputs[0]); // pac number (unique within a team)
-        const mine = inputs[1] !== '0'; // true if this pac is yours
-        const x = parseInt(inputs[2]); // position in the grid
-        const y = parseInt(inputs[3]); // position in the grid
-        const typeId = inputs[4]; // unused in wood leagues
-        const speedTurnsL = parseInt(inputs[5]); // unused in wood leagues
-        const abilityCoolD = parseInt(inputs[6]); // unused in wood leagues
-        game.pacs.push(new Pac(x,y,pacId,mine,typeId,speedTurnsL,abilityCoolD));
-        
-    }
-    updateSight(game)
-    game.map.printOut();
-    const visiblePelletCount = parseInt(readline()); // all pellets in sight
-    let pellets=[]
-    for (let i = 0; i < visiblePelletCount; i++) {
-        var inputs = readline().split(' ');
-        const x = parseInt(inputs[0]);
-        const y = parseInt(inputs[1]);
-        const value = parseInt(inputs[2]); // amount of points this pellet is worth
-        pellets.push({x:x,y:y,value:value})
-        game.map.set(x,y,value==10?9:value)
-    }
-    return pellets;
-
-}
-
-function applyLogic(game,pellets) {
-    myPacs = game.pacs.filter(pac=>pac.owner==1);
-    // Write an action using console.log()
-    // To debug: console.error('Debug messages...');
-    for(i=0;i<myPacs.length;i++) {
-        pac=myPacs[i]
-
-        let targets = []
-        
-
-        if (targets.length==0) {
-            targets = pellets.filter(p=>p.value==10);
-            
-        }
-        if (targets.length == 0) {
-            targets=pellets.filter(p=>p.x==pac.x||p.y==pac.y)
-        }
-        if (targets.length==0) {
-            targets = game.map.listPoints("1")
-        }
-        if (targets.length==0) {
-            targets = game.map.listPoints("0")
-        }
-
-        let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))
-        let cp=targets[distances.indexOf(Math.min(...distances))];
-        
-        if ((Math.abs(pac.x-cp.x)+Math.abs(pac.y-cp.y))==1&&pac.speed==2) {
-            console.error(pac.Id, "moves less")
-            cp.x+=cp.x-pac.x;
-            cp.y+=cp.y-pac.y;
-        }
-        if (pac.abilityCoolD == 0) pac.speedX(game.output);
-        else pac.move(game.map,cp.x,cp.y,game.output);
-        
-
-    }
-}
 
 let graphModel = {
     listNodes: function(gmap) {
@@ -297,10 +194,12 @@ let graphModel = {
             let eID = edgeID.get(e.x,e.y).split`:`
             let nb = edgeID.neighbour(e.x,e.y);
             nb = nb.find(n=>{
-                let nID = edgeID.get(n.x,n.y).split`:`;
+                let nID = edgeID.get(n.x,n.y)
+                nID=nID.toString().split(":");
+                
                 if (nID[0] == "N"&&nID[1]!=eID[1])
-                    return true
-                return false
+                    return true;
+                return false;
             })
             if (nb) {
                 let nID = edgeID.get(nb.x,nb.y).split`:`;
@@ -315,32 +214,195 @@ let graphModel = {
         edgePoints.map(e=>{
             let eV = edgeID.get(e.x,e.y).split`:`;
             let partnerNode = nodes[eV[1]].friends.find(f=>f.edge==eV[2]);
-            if (partnerNode) edgeID.set(e.x,e.y,`${eV[1]}:${partnerNode.node}:${partnerNode.length}:${partnerNode.edge}`);
-            
-        })
+            if (partnerNode) {
+                tilesInEdge = edgeID.listPoints(eV.join`:`)
+                tilesInEdge.map(t=>edgeID.set(t.x,t.y,`${eV[1]}:${partnerNode.node}:${partnerNode.length}:${partnerNode.edge}`));
+            }
+        });
         return {graphMap:edgeID, nodes:nodes}
 
     },
     createFullGraph: function(gmap) {
         let nodes = this.listNodes(gmap);
-        fullGraph = this.findEdges(gmap,nodes);
+        let fullGraph = this.findEdges(gmap,nodes);
         return fullGraph;
 
     }
 }
 class Graph {
     constructor(gmap) {
-        let graph = graphModel.createFullGraph(Graph);
+        let graph = graphModel.createFullGraph(gmap);
         this.nodes = graph.node;
-        this.edgesMap = graph.graphMap;
+        this.graphMap = graph.graphMap;
     }
-    get nodeFromXY(x,y) {
-        return node
+    nodeFromXY(x,y) {
+        let tile = this.graphMap.get(x,y);
+        tile = tile.split`:`
+        if (tile[0]=="N") {
+            return this.nodes[tile[1]].friends.map(t=>t.node)
+        }
+        else  
+        return [tile[0],tile[1]]
     }
-    get connections(node) {
+    nodeLocation(node) {
+        let pos = this.graphMap.field.indexOf(f=>{
+            f=f.split`:`;
+            return f[0]=="N"&&f[1]==node;
+        })
+        if (!pos) return false
+        return new Point(pos%this.graphMap.width,Math.floor(pos/this.graphMap.height));
+    }
+    edgeTiles(nodeA,nodeB) {
+        tiles = []
+        this.graphMap.field.map((tile,i)=>{
+            tile=tile.split`:`
+            if(tile[0]==nodeA&&tile[1]==nodeB||tile[1]==nodeA&&tile[0]==nodeB) {
+                tiles.push(new Point(i%this.graphMap.width,Math.floor(i/this.graphMap.height)));
+            }
+        })
+    }
+
+}
+
+let logicFunction = {
+    detectEnemy(x,y,pacs) {
+        let enemies = []
+        for (let i=0;i<pacs.length;i++) {
+            let p = pacs[i];
+            if (p.owner == 1 && p.x==x && p.y == y) {
+                enemies.push(p);
+            }
+
+        }
+        return enemies;
+    },
+    isBlocked(x,y,pacs) {
+        let b = [];
+        for (let i=0;i<pacs.length;i++) {
+            let p = pacs[i];
+            if (p.x==x+1 || p.x==x-1 || p.y==y+1 || p.y==y-1) {
+                b.push(p);
+            }
+
+        }
+        return b;
+    },
+    findNextNode(x,y,graph) {
+        return graph.nodeFromXY(x,y);
+    }
+
+
+
+}
+
+function readMap() {
+    let gmap
+    var inputs = readline().split(' ');
+    width = parseInt(inputs[0]); // size of the grid
+    height = parseInt(inputs[1]); // top L corner is (x=0, y=0)
+    for (let i = 0; i < height; i++) {
+        const row = readline(); // one line of the grid: space " " is floor, pound "#" is wall
+        if (i) gmap = gmap + row;
+        else gmap = row;
+    }
+    return gmap;
+}
+function updateSight(game) {
+    let myPacs = game.pacs.filter(pac=>pac.owner==1)
+    for (i=0;i<myPacs.length;i++) {
+       let pac = myPacs[i]
+       let lineOfSight = game.map.lineOfSight(pac.x,pac.y);
+       lineOfSight.cells.map(c=>game.map.set(c.x,c.y,"0"));
+       game.map.set(pac.x,pac.y,"0");
+
+    }
+
+}
+
+function readTurn(game) {
+    game.output=[];
+    game.pacs=[];
+
+    var inputs = readline().split(' ');
+    const myScore = parseInt(inputs[0]);
+    const opponentScore = parseInt(inputs[1]);
+    const visiblePacCount = parseInt(readline()); // all your pacs and enemy pacs in sight
+    
+    game.players[0].score = myScore;
+    game.players[1].score = opponentScore;
+       
+    let myPac
+    for (let i = 0; i < visiblePacCount; i++) {
+        var inputs = readline().split(' ');
+        const pacId = parseInt(inputs[0]); // pac number (unique within a team)
+        const mine = inputs[1] !== '0'; // true if this pac is yours
+        const x = parseInt(inputs[2]); // position in the grid
+        const y = parseInt(inputs[3]); // position in the grid
+        const typeId = inputs[4]; // unused in wood leagues
+        const speedTurnsL = parseInt(inputs[5]); // unused in wood leagues
+        const abilityCoolD = parseInt(inputs[6]); // unused in wood leagues
+        game.pacs.push(new Pac(x,y,pacId,mine,typeId,speedTurnsL,abilityCoolD));
+        
+    }
+    updateSight(game)
+    const visiblePelletCount = parseInt(readline()); // all pellets in sight
+    let pellets=[]
+    for (let i = 0; i < visiblePelletCount; i++) {
+        var inputs = readline().split(' ');
+        const x = parseInt(inputs[0]);
+        const y = parseInt(inputs[1]);
+        const value = parseInt(inputs[2]); // amount of points this pellet is worth
+        pellets.push({x:x,y:y,value:value})
+        game.map.set(x,y,value==10?9:value)
+    }
+    return pellets;
+
+}
+
+function applyLogic(game,pellets) {
+    myPacs = game.pacs.filter(pac=>pac.owner==1);
+    let graph = new Graph(game.map);
+    
+    // Write an action using console.log()
+    // To debug: console.error('Debug messages...');
+    console.error("apply logic");
+    for(let i=0;i<myPacs.length;i++) {
+        pac=myPacs[i];
+
+        let targets = [];
+        console.error(`PAC ${pac.Id}`);
+        console.error(logicFunction.isBlocked(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
+        console.error(logicFunction.detectEnemy(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
+        console.error(logicFunction.findNextNode(pac.x,pac.y,graph))
+        if (targets.length==0) {
+            targets = pellets.filter(p=>p.value==10);
+            
+        }
+        if (targets.length == 0) {
+            targets=pellets.filter(p=>p.x==pac.x||p.y==pac.y);
+        }
+        if (targets.length==0) {
+            targets = game.map.listPoints("1");
+        }
+        if (targets.length==0) {
+            targets = game.map.listPoints("0");
+        }
+
+        let distances=targets.map(p=>Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y));
+        let cp=targets[distances.indexOf(Math.min(...distances))];
+        
+        if ((Math.abs(pac.x-cp.x)+Math.abs(pac.y-cp.y))==1&&pac.speed==2) {
+            console.error(pac.Id, "moves less")
+            cp.x+=cp.x-pac.x;
+            cp.y+=cp.y-pac.y;
+        }
+        if (pac.abilityCoolD == 0) pac.speedX(game.output);
+        else pac.move(game.map,cp.x,cp.y,game.output);
+        
 
     }
 }
+
 
 
 
