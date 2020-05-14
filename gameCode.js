@@ -188,7 +188,6 @@ let graphModel = {
 
         }
         let connections = []
-        distances.printOut();
         let edgePoints = gmap.listPoints(" ");
         edgePoints.map(e=>{
             let eID = edgeID.get(e.x,e.y).split`:`
@@ -207,7 +206,12 @@ let graphModel = {
                     node:nID[1],
                     length:distances.get(e.x,e.y),
                     edge:eID[2]
-                }) 
+                }); 
+                nodes[nID[1]].friends.push({
+                    node:eID[1],
+                    length:distances.get(e.x,e.y),
+                    edge:eID[2]
+                })
             } 
 
         });
@@ -232,7 +236,11 @@ let graphModel = {
 class Graph {
     constructor(gmap) {
         let graph = graphModel.createFullGraph(gmap);
-        this.nodes = graph.node;
+        console.error("Graph created", graph.nodes.filter(n=>n.friends.length!=n.edges))
+        console.error(graph.graphMap.get(1,12))
+        console.error(graph.nodes[1],graph.nodes[5])
+        console.error(graph.graphMap.get(3,10))
+        this.nodes = graph.nodes;
         this.graphMap = graph.graphMap;
     }
     nodeFromXY(x,y) {
@@ -361,7 +369,6 @@ function readTurn(game) {
 
 function applyLogic(game,pellets) {
     myPacs = game.pacs.filter(pac=>pac.owner==1);
-    let graph = new Graph(game.map);
     
     // Write an action using console.log()
     // To debug: console.error('Debug messages...');
@@ -373,7 +380,7 @@ function applyLogic(game,pellets) {
         console.error(`PAC ${pac.Id}`);
         console.error(logicFunction.isBlocked(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
         console.error(logicFunction.detectEnemy(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
-        console.error(logicFunction.findNextNode(pac.x,pac.y,graph))
+        console.error(logicFunction.findNextNode(pac.x,pac.y,game.graph))
         if (targets.length==0) {
             targets = pellets.filter(p=>p.value==10);
             
@@ -417,12 +424,14 @@ let game = {
     map : startMap,
     pacs : [],
     players : [new Player(0) , new Player(0)],
-    output : []
+    output : [],
+    graph : new Graph(startMap)
+
 }
 let nodes = graphModel.listNodes(game.map);
 
-graphModel.showNodes(game.map,nodes)
-graphModel.findEdges(game.map,nodes)
+console.error(game.graph.graphMap.listPoints(" "));
+
 
 
 
