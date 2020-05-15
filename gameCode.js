@@ -103,6 +103,7 @@ class Pac {
         this.abilityCoolD=coolD;
         this.speed=speedTimer?2:1;
         this.speedTimer=speedTimer;
+        this.notActed = true;
     }
     move(gmap,x,y,output) {
         let h = gmap.height;
@@ -110,7 +111,8 @@ class Pac {
         if (this.abilityCoolD) this.abilityCoolD--;
         if (this.speedTimer) this.speedTimer--;
         
-        output.push(`MOVE ${this.Id} ${(x+w)%w} ${(y+h)%h}`);
+        if (this.notActed) output.push(`MOVE ${this.Id} ${(x+w)%w} ${(y+h)%h}`);
+        this.notActed = false;
         return true; 
         
 
@@ -119,12 +121,16 @@ class Pac {
         this.speed = 2;
         this.abilityCoolD = 10;
         this.speedTimer = 5;
-        output.push(`SPEED ${this.Id}`);
+        if (this.notActed)
+            output.push(`SPEED ${this.Id}`);
+        this.notActed = false;
     }
     changeType(type,output) {
         this.type=type;
         this.abilityCoolD=10;
-        output.push(`SWITCH ${this.Id} ${this.type}`)
+        if (this.notActed)
+            output.push(`SWITCH ${this.Id} ${this.type}`)
+        this.notActed = false;
     }
     
 
@@ -199,7 +205,7 @@ let graphModel = {
                 if (nID[0] == "N"&&nID[1]!=eID[1])
                     return true;
                 return false;
-            })
+            });
             if (nb) {
                 let nID = edgeID.get(nb.x,nb.y).split`:`;
                 nodes[eID[1]].friends.push({
@@ -236,10 +242,6 @@ let graphModel = {
 class Graph {
     constructor(gmap) {
         let graph = graphModel.createFullGraph(gmap);
-        console.error("Graph created", graph.nodes.filter(n=>n.friends.length!=n.edges))
-        console.error(graph.graphMap.get(1,12))
-        console.error(graph.nodes[1],graph.nodes[5])
-        console.error(graph.graphMap.get(3,10))
         this.nodes = graph.nodes;
         this.graphMap = graph.graphMap;
     }
@@ -261,13 +263,16 @@ class Graph {
         return new Point(pos%this.graphMap.width,Math.floor(pos/this.graphMap.height));
     }
     edgeTiles(nodeA,nodeB) {
-        tiles = []
+        tiles = [];
         this.graphMap.field.map((tile,i)=>{
             tile=tile.split`:`
             if(tile[0]==nodeA&&tile[1]==nodeB||tile[1]==nodeA&&tile[0]==nodeB) {
                 tiles.push(new Point(i%this.graphMap.width,Math.floor(i/this.graphMap.height)));
             }
-        })
+        });
+    }
+    listEdges() {
+        this.graphMap.field.filter(tile=>tile.match("E"))
     }
 
 }
@@ -277,7 +282,7 @@ let logicFunction = {
         let enemies = []
         for (let i=0;i<pacs.length;i++) {
             let p = pacs[i];
-            if (p.owner == 1 && p.x==x && p.y == y) {
+            if (p.owner == 1 && p.x==x && p.y == y)  {
                 enemies.push(p);
             }
 
@@ -297,6 +302,28 @@ let logicFunction = {
     },
     findNextNode(x,y,graph) {
         return graph.nodeFromXY(x,y);
+    },
+    isNode(x,y,graph) {
+        let tile = graph.graphMap.get(x,y).split`:`;
+        if (tile[0]=="N")
+            return tile[1];
+        else
+            return false;
+    },
+    evalEdges(graph,gmap) {
+        let edges = {}
+        for (let x=0;x<gmap.width;x++)for (let y=0;y<gmap.height;y++) {
+            ep = graph.graphMap.get(x,y);
+            if (ep.match(/^[0-9]/)) {
+                let tileValue = gmap.get(x,y);
+                let v  = tileValue==" "?1:tileValue==0?0.01:Number(tileValue)
+                if (edges[ep]) {
+                    edges[ep]+=v;
+                }
+                else edges[ep]=v;
+            }
+        }
+        return edges;
     }
 
 
@@ -361,9 +388,13 @@ function readTurn(game) {
         const y = parseInt(inputs[1]);
         const value = parseInt(inputs[2]); // amount of points this pellet is worth
         pellets.push({x:x,y:y,value:value})
-        game.map.set(x,y,value==10?9:value)
+        game.map.set(x,y,value)
     }
+    game.edges=logicFunction.evalEdges(game.graph,game.map)
+    console.error("Edges value")
+    console.error(game.edges);
     return pellets;
+
 
 }
 
@@ -377,12 +408,58 @@ function applyLogic(game,pellets) {
         pac=myPacs[i];
 
         let targets = [];
+        let enemies = logicFunction.detectEnemy(pac.x,pac.y,game.pacs).filter(x=>x.owner==1);
         console.error(`PAC ${pac.Id}`);
+        console.error("blockers:");
         console.error(logicFunction.isBlocked(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
-        console.error(logicFunction.detectEnemy(pac.x,pac.y,game.pacs).map(x=>x.Id+":"+x.owner));
-        console.error(logicFunction.findNextNode(pac.x,pac.y,game.graph))
+        console.error("enemies");
+        console.error(logicFunction.detectEnemy(pac.x,pac.y,game.pacs).filter(x=>x.owner==1).map(x=>x.Id+":"+x.owner + ":" +x.type));
+        console.error("next nodes");
+        console.error(logicFunction.findNextNode(pac.x,pac.y,game.graph));
+        let np
+        if (np=logicFunction.isNode(pac.x,pac.y,game.graph))
+            console.error(np)
+
+        console.error(pac.lastNode);
+        let dist = game.pacs.map(p=>(Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))?(Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y)):99);
+        let nearest = Math.min(...dist);
+        console.error(`Nearest to ${pac.Id} ${nearest}`)
+        if (nearest<3) {
+            let index = dist.indexOf(nearest)
+            let pac2 = game.pacs[index]; 
+            if (pac2.owner == true && pac.Id > pac2.Id) {
+                targets = game.graph
+                    .nodeFromXY(pac.x,pac.y)
+                    .map(node=>game.graph.nodeLocation(node.x,node.y));
+            }
+            else if (pac2.owner == false 
+                &&(pac2.type=="ROCK" && pac.type == "PAPER"
+                || pac2.type=="PAPER" && pac.type == "SCISSORS"
+                || pac2.type=="SCISSORS" && pac.type == "ROCK")) {
+                    targets=[new Point(pac2.x,pac2.y)]
+            }
+            else if (pac2.owner == false && pac.abilityCoolD==0) {
+                console.error(`Pac ${pac.Id} changing type `)
+                switch(pac2.type) {
+                    case "ROCK":
+                        pac.changeType("PAPER",game.output)
+                        break;
+                    case "PAPER":
+                        pac.changeType("SCISSORS",game.output);
+                        break;
+                    case "SCISSORS":
+                        pac.changeType("ROCK",game.output);
+                        break;
+                }
+            }
+
+        }
+
+        let pts=false;
         if (targets.length==0) {
             targets = pellets.filter(p=>p.value==10);
+            if (targets.length) pts=true;
+
             
         }
         if (targets.length == 0) {
@@ -404,19 +481,20 @@ function applyLogic(game,pellets) {
             cp.y+=cp.y-pac.y;
         }
         if (pac.abilityCoolD == 0) pac.speedX(game.output);
-        else pac.move(game.map,cp.x,cp.y,game.output);
+        else {
+            if (pts) {
+                let ind = pellets.indexOf(pellets.find(p=>p.x==cp.x&&p.y==cp.yp))
+                pellets.splice(ind,1);
+            }
+            if (myPacs.find(mp=>mp.Id<pac.Id&&(Math.abs(mp.x-pac.x)<1||Math.abs(mp.y-pac.y)<1))) {
+                cp=targets[distances.indexOf(Math.max(...distances))];
+            }
+            pac.move(game.map,cp.x,cp.y,game.output);
+        }
         
 
     }
 }
-
-
-
-
-
-
-
-
 console.error("hi")
 let startMap = new Map([...readMap()],width,height);
 
@@ -425,19 +503,16 @@ let game = {
     pacs : [],
     players : [new Player(0) , new Player(0)],
     output : [],
-    graph : new Graph(startMap)
+    graph : new Graph(startMap),
+    history : []
 
 }
 let nodes = graphModel.listNodes(game.map);
-
 console.error(game.graph.graphMap.listPoints(" "));
-
-
-
-
 // game loop
 while (true) {
     let pellets = readTurn(game);
+    game.history.push(game.pacs);
     applyLogic(game,pellets);
     console.log(game.output.join` | `);     // MOVE <pacId> <x> <y>
 
