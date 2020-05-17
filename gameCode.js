@@ -225,8 +225,12 @@ let graphModel = {
             let eV = edgeID.get(e.x,e.y).split`:`;
             let partnerNode = nodes[eV[1]].friends.find(f=>f.edge==eV[2]);
             if (partnerNode) {
-                tilesInEdge = edgeID.listPoints(eV.join`:`)
-                tilesInEdge.map(t=>edgeID.set(t.x,t.y,`${eV[1]}:${partnerNode.node}:${partnerNode.length}:${partnerNode.edge}`));
+                let fill = `${partnerNode.length}:${partnerNode.edge}`
+                let newID =Number(eV[1])<Number(partnerNode.node)
+                    ?`${eV[1]}:${partnerNode.node}:${fill}`
+                    :`${partnerNode.node}:${eV[1]}:${fill}`;
+                tilesInEdge = edgeID.listPoints(eV.join`:`);
+                tilesInEdge.map(t=>edgeID.set(t.x,t.y,newID));
             }
         });
         return {graphMap:edgeID, nodes:nodes}
@@ -236,7 +240,6 @@ let graphModel = {
         let nodes = this.listNodes(gmap);
         let fullGraph = this.findEdges(gmap,nodes);
         return fullGraph;
-
     }
 }
 class Graph {
@@ -249,7 +252,7 @@ class Graph {
         let tile = this.graphMap.get(x,y);
         tile = tile.split`:`
         if (tile[0]=="N") {
-            return this.nodes[tile[1]].friends.map(t=>t.node)
+            return this.nodes[tile[1]].friends.map(t=>t.node);
         }
         else  
         return [tile[0],tile[1]]
@@ -324,7 +327,45 @@ let logicFunction = {
             }
         }
         return edges;
-    }
+    },
+    evalDirections(x,y,graph,gmap) {
+        if (!this.isNode(x,y,graph)) {
+            let nb = gmap.neighbour(x,y);
+            let pathA=nb[0];
+            let pathB=nb[1];
+        }
+        
+    },
+    createRandomPath(sx,sy,maxLen,graph,gmap) {
+        //Select next node based on past projection
+        let cNodes = graph.nodeFromXY(sx,sy);
+        Math.floor(Math.random()*cNodes.length)
+        let totalPath = 0;
+        let totalScore = 0;
+        let qFactor = .95;
+        let edges = this.evalEdges(graph,gmap)
+        while (totalPath<maxLen) {
+            let oNode = cNodes[cNodes.length-1];
+            let choices = graph.nodes[cNodes[cNodes.length-1]].friends;
+            let rnd = Math.floor(Math.random()*choices.length);
+            let nFriend = choices[rnd];
+            cNodes.push(nFriend.node);
+            totalPath+=nFriend.length;
+            let edge = oNode < nFriend.node 
+                ? `${oNode}:${nFriend.node}:${nFriend.length}:${nFriend.edge}`
+                :`${nFriend.node}:${oNode}:${nFriend.length}:${nFriend.edge}`;
+            totalScore += edges[edge]*qFactor;
+            console.error(edges[edge],edge)
+            edges[edge]=0;
+
+
+        }
+        console.error(totalScore)
+
+        return cNodes;
+        //Select paths, until length is max
+        //Evaluate path
+    } 
 
 
 
@@ -391,8 +432,7 @@ function readTurn(game) {
         game.map.set(x,y,value)
     }
     game.edges=logicFunction.evalEdges(game.graph,game.map)
-    console.error("Edges value")
-    console.error(game.edges);
+
     return pellets;
 
 
@@ -406,6 +446,10 @@ function applyLogic(game,pellets) {
     console.error("apply logic");
     for(let i=0;i<myPacs.length;i++) {
         pac=myPacs[i];
+        if (i==0) {
+            let path = logicFunction.createRandomPath(pac.x,pac.y,100,game.graph,game.map);
+            console.error(path);
+        }
 
         let targets = [];
         let enemies = logicFunction.detectEnemy(pac.x,pac.y,game.pacs).filter(x=>x.owner==1);
@@ -420,7 +464,6 @@ function applyLogic(game,pellets) {
         if (np=logicFunction.isNode(pac.x,pac.y,game.graph))
             console.error(np)
 
-        console.error(pac.lastNode);
         let dist = game.pacs.map(p=>(Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y))?(Math.abs(p.x-pac.x)+Math.abs(p.y-pac.y)):99);
         let nearest = Math.min(...dist);
         console.error(`Nearest to ${pac.Id} ${nearest}`)
@@ -491,8 +534,6 @@ function applyLogic(game,pellets) {
             }
             pac.move(game.map,cp.x,cp.y,game.output);
         }
-        
-
     }
 }
 console.error("hi")
